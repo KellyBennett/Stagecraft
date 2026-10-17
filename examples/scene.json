@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "objects": [
+    {"name": "Ground", "type": "plane", "location": [0, 0, 0], "dimensions": [20, 20, 1]},
+    {"name": "Main mass", "type": "box", "location": [0, 0, 1], "dimensions": [2, 3, 2]},
+    {"name": "Column", "type": "cylinder", "location": [3, 0, 1.5], "dimensions": [0.6, 0.6, 3]}
+  ]
+}
