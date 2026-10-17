@@ -25,7 +25,7 @@ Top-level `version: 1` and `objects: [...]` are required. Between 1 and 1000 pri
 | `dimensions` | Three positive finite numbers, local size before rotation |
 | `rotation_degrees` | Optional XYZ Euler angles, defaults to `[0,0,0]` |
 
-World Z points up. X follows the orange ground direction; Y is perpendicular and chosen to preserve an upright right-handed frame. Axis signs are ambiguous from parallel lines alone. Inspect the solved camera when authoring placements. Planes lie in local XY; Z dimension has no effect. Cylinders use 12 sides; spheres use 12 segments and 6 rings. Names may be adjusted by Blender if they collide with the camera name.
+World Z points up. X follows the orange horizontal direction; Y is perpendicular and chosen to preserve an upright right-handed frame. Axis signs are ambiguous from parallel lines alone. Inspect the solved camera when authoring placements. Planes lie in local XY; Z dimension has no effect. Cylinders use 12 sides; spheres use 12 segments and 6 rings. Names may be adjusted by Blender if they collide with the camera name.
 
 ## Alignment and camera
 
@@ -36,12 +36,15 @@ World Z points up. X follows the orange ground direction; Y is perpendicular and
   "x": [[[40, 400], [250, 300]], [[90, 500], [300, 350]]],
   "y": [[[550, 300], [760, 400]], [[500, 350], [710, 500]]],
   "origin": [400, 500],
-  "camera_height": 1.6
+  "camera_height": 1.6,
+  "reference_plane": "ground"
 }
 ```
 
-Each axis has two segments. Their intersection is its vanishing point; off-image vanishing points are supported. Segments need at least two pixels of length. Nearly parallel pairs, nonpositive focal length, and origins at or above the horizon are rejected. These checks catch mathematical failures, not all mistaken human alignments.
+Each axis has two segments. Their intersection is its vanishing point; off-image vanishing points are supported. Segments need at least two pixels of length. Nearly parallel pairs, nonpositive focal length, and origins on the wrong side of the horizon are rejected. These checks catch mathematical failures, not all mistaken human alignments.
 
-The principal point is fixed at the image center. Orthogonal vanishing points constrain `f² = -(vx-c)·(vy-c)`. Camera coordinates use x right, y up, forward -z. `rotation` maps camera vectors to world vectors. `location` places the camera at the supplied height while projecting world origin to the selected image pixel. Lens millimeters are reported against a 36 mm horizontal sensor. Blender uses horizontal sensor fit and square pixels.
+The principal point is fixed at the image center. Orthogonal vanishing points constrain `f² = -(vx-c)·(vy-c)`. Camera coordinates use x right, y up, forward -z. `rotation` maps camera vectors to world vectors. `location` places the camera at the supplied distance from the reference plane while projecting world origin to the selected image pixel. Lens millimeters are reported against a 36 mm horizontal sensor. Blender uses horizontal sensor fit and square pixels.
 
-This supports finite two-point perspective of perpendicular ground axes. One-point perspective, unknown principal point, lens correction, nonorthogonal axes, automatic segmentation, geometry fitting, occlusion recovery, and fSpy project import are outside this slice. No claim of fSpy feature parity is made.
+The optional `reference_plane` is `ground` by default, placing the camera above Z=0. Set it to `overhead` to place the camera below Z=0 for an upward view. `camera_height` remains a positive distance in both modes. The origin must be below the horizon for ground mode and above it for overhead mode.
+
+Stagecraft supports finite two-point perspective of perpendicular horizontal axes. One-point perspective, unknown principal point, lens correction, nonorthogonal axes, automatic segmentation, geometry fitting, occlusion recovery, and fSpy project import are outside this slice. No claim of fSpy feature parity is made.

@@ -1,8 +1,7 @@
 """Two orthogonal vanishing points, centered principal point, square pixels.
 
 Image coordinates are pixels, x right, y down. Camera coordinates follow
-Blender: x right, y up, looking down -z. Rotation columns are world axes
-expressed in camera coordinates; its transpose maps camera to world.
+Blender: x right, y up, looking down -z. Rotation rows map camera coordinates to world coordinates.
 """
 import math
 
@@ -71,19 +70,24 @@ def solve(width, height, alignment):
     if z[1] < 0:
         y = [-v for v in y]
         z = [-v for v in z]
-    origin = point(alignment.get("origin"), "Ground origin")
+    origin = point(alignment.get("origin"), "Plane origin")
     if not (0 <= origin[0] <= width and 0 <= origin[1] <= height):
-        raise ValueError("Ground origin must lie inside the image")
+        raise ValueError("Plane origin must lie inside the image")
+    reference_plane = alignment.get("reference_plane", "ground")
+    if reference_plane not in ("ground", "overhead"):
+        raise ValueError("Reference plane must be ground or overhead")
     h = finite_number(alignment.get("camera_height", 1.6), "Camera height")
     if h <= 0:
         raise ValueError("Camera height must be positive")
     ray = [(origin[0]-cx)/f, (cy-origin[1])/f, -1]
     ray_world = [dot(axis, ray) for axis in (x, y, z)]
-    if ray_world[2] >= -1e-6:
-        raise ValueError("Ground origin must be below the horizon")
-    distance = -h/ray_world[2]
+    signed_height = h if reference_plane == "ground" else -h
+    if abs(ray_world[2]) < 1e-6 or signed_height * ray_world[2] >= 0:
+        side = "below" if reference_plane == "ground" else "above"
+        raise ValueError(f"{reference_plane.capitalize()} origin must be {side} the horizon")
+    distance = -signed_height/ray_world[2]
     location = [-distance*r for r in ray_world]
     rotation = [list(row) for row in (x, y, z)]  # camera-to-world rows
     return {"focal_px": f, "lens_mm": f*36/width, "sensor_width_mm": 36,
             "location": location, "rotation": rotation,
-            "vanishing_points": [vx, vy], "width": width, "height": height}
+            "reference_plane": reference_plane, "vanishing_points": [vx, vy], "width": width, "height": height}

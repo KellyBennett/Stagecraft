@@ -43,3 +43,29 @@ class CameraTests(unittest.TestCase):
         value['origin'] = [500, 0]
         with self.assertRaisesRegex(ValueError, 'below the horizon'):
             solve(WIDTH, HEIGHT, value)
+
+    def test_recovers_upward_camera_below_overhead_plane(self):
+        from stagecraft.camera import unit
+        location = [-6, -8, -5]
+        forward = unit([-v for v in location])
+        right = unit(cross(forward, [0, 0, 1]))
+        up = cross(right, forward)
+        back = [-v for v in forward]
+        def project(p):
+            q = [v-c for v,c in zip(p,location)]
+            x,y,z = [dot(axis,q) for axis in (right,up,back)]
+            return [WIDTH/2-FOCAL*x/z, HEIGHT/2+FOCAL*y/z]
+        value = {'x': [[project([-2,-2,0]),project([2,-2,0])], [project([-2,2,0]),project([2,2,0])]],
+                 'y': [[project([-2,-2,0]),project([-2,2,0])], [project([2,-2,0]),project([2,2,0])]],
+                 'origin': project([0,0,0]), 'camera_height': 5, 'reference_plane': 'overhead'}
+        solved = solve(WIDTH,HEIGHT,value)
+        self.assertAlmostEqual(solved['focal_px'],FOCAL)
+        for a,b in zip(solved['location'],location): self.assertAlmostEqual(a,b)
+        for row,wanted in zip(solved['rotation'],zip(right,up,back)):
+            for a,b in zip(row,wanted): self.assertAlmostEqual(a,b)
+        value['reference_plane']='ground'
+        with self.assertRaisesRegex(ValueError,'below the horizon'): solve(WIDTH,HEIGHT,value)
+
+    def test_rejects_unknown_reference_plane(self):
+        value=alignment();value['reference_plane']='wall'
+        with self.assertRaisesRegex(ValueError,'Reference plane'): solve(WIDTH,HEIGHT,value)

@@ -49,7 +49,7 @@ def build(payload_path):
     scene.render.pixel_aspect_x = scene.render.pixel_aspect_y = 1
     scene.view_layers[0].use_pass_z = True
     scene["stagecraft_version"] = 1
-    scene["stagecraft_assumptions"] = "Centered principal point; square pixels; perpendicular ground axes; supplied height and primitives"
+    scene["stagecraft_assumptions"] = "Centered principal point; square pixels; perpendicular horizontal axes; supplied plane distance and primitives"
     bpy.ops.wm.save_as_mainfile(filepath=payload["output"])
 
 
