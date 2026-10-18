@@ -15,6 +15,26 @@
 <p><small>Tab to select a handle. Arrow keys move it one pixel; Shift + arrow moves ten. Guide extensions show convergence. Save overwrites the working controls and keeps this session open. Finish closes the session and resumes the CLI; run then exports the latest saved controls.</small></p>
 <p id="message" role="status" aria-live="polite">Loading photograph…</p>
 </main>
+<script id="session-gate">
+function createSessionGate() {
+  let loaded = false, saved = false, pending = false, finished = false;
+  return {
+    get canSave() { return loaded && !pending && !finished; },
+    get canFinish() { return this.canSave && saved; },
+    load(hasSaved) { loaded = true; saved = Boolean(hasSaved); },
+    begin(action) {
+      if (!(action === 'save' ? this.canSave : this.canFinish)) return false;
+      pending = true;
+      return true;
+    },
+    complete(action, succeeded) {
+      pending = false;
+      if (succeeded && action === 'save') saved = true;
+      if (succeeded && action === 'finish') finished = true;
+    }
+  };
+}
+</script>
 <script>
 const svg=document.querySelector('#canvas'), msg=document.querySelector('#message'), save=document.querySelector('#save');
 const ns='http://www.w3.org/2000/svg';let state, alignment, selected=null;
@@ -29,8 +49,52 @@ for(const [axis,color] of [['x','#ffb860'],['y','#64d8df']])for(let i=0;i<2;i++)
 for(const axis of ['x','y','origin']){const color=axis==='x'?'#ffb860':axis==='y'?'#64d8df':'#c7b4ff';for(let i=0;i<(axis==='origin'?1:2);i++)for(let j=0;j<(axis==='origin'?1:2);j++){const handle=element('circle',{class:'handle',r:radius,fill:color,tabindex:0,role:'button','aria-label':axis==='origin'?'Plane origin':`${axis.toUpperCase()} guide ${i+1} endpoint ${j+1}`,'data-axis':axis,'data-line':i,'data-end':j});handle.addEventListener('pointerdown',e=>{selected=handle;handle.setPointerCapture(e.pointerId);});handle.addEventListener('pointermove',e=>{if(selected!==handle)return;const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());move(handle,p.x,p.y);});handle.addEventListener('pointerup',()=>selected=null);handle.addEventListener('pointercancel',()=>selected=null);handle.addEventListener('keydown',e=>{const d={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(d){e.preventDefault();const p=getPoint(handle),step=e.shiftKey?10:1;move(handle,p[0]+d[0]*step,p[1]+d[1]*step);}});}}
 update();}
 document.querySelector('#reset').onclick=()=>{alignment=defaults();document.querySelector('#height').value=1.6;document.querySelector('#plane').value='ground';draw();msg.textContent='Guides reset. Align all four lines before saving.';};
-save.onclick=async()=>{save.disabled=true;msg.textContent='Checking perspective…';try{alignment.reference_plane=document.querySelector('#plane').value;alignment.camera_height=Number(document.querySelector('#height').value);const response=await fetch('alignment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(alignment)});const result=await response.json();if(!response.ok)throw Error(result.error);msg.textContent=`Saved. Camera lens: ${result.lens_mm.toFixed(2)} mm on a 36 mm sensor. You can keep editing or finish the session.`;document.querySelector('#finish').disabled=false;}catch(e){msg.textContent=e.message;save.disabled=false;}finally{save.disabled=false;}};
-document.querySelector('#finish').onclick=async()=>{try{const response=await fetch('finish',{method:'POST'});const result=await response.json();if(!response.ok)throw Error(result.error);save.disabled=true;document.querySelector('#finish').disabled=true;msg.textContent='Session finished. The CLI has resumed. You can close this tab.';}catch(e){msg.textContent=e.message;}};
-(async()=>{try{const response=await fetch('state');if(!response.ok)throw Error('Session unavailable. Restart stagecraft align.');state=await response.json();document.querySelector('#context').textContent=state.active_project?`Project: ${state.active_project} / Scene: ${state.scene}\nControls: ${state.controls}\nBlender: ${state.output}\nDepth output: ${state.depth_output}`:'';document.querySelector('#finish').disabled=!state.alignment;alignment=state.alignment||defaults();document.querySelector('#height').value=alignment.camera_height;document.querySelector('#plane').value=alignment.reference_plane||'ground';draw();save.disabled=false;msg.textContent='Align the guides and plane origin, then save.';}catch(e){msg.textContent=e.message;}})();
+const session = createSessionGate();
+const finish = document.querySelector('#finish');
+function updateActions() {
+  save.disabled = !session.canSave;
+  finish.disabled = !session.canFinish;
+}
+async function post(route, value) {
+  const response = await fetch(route, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: value === undefined ? undefined : JSON.stringify(value)
+  });
+  const result = await response.json();
+  if (!response.ok) throw Error(result.error);
+  return result;
+}
+save.onclick = async () => {
+  if (!session.begin('save')) return;
+  updateActions();
+  msg.textContent = 'Checking perspective…';
+  try {
+    alignment.reference_plane = document.querySelector('#plane').value;
+    alignment.camera_height = Number(document.querySelector('#height').value);
+    const result = await post('alignment', alignment);
+    session.complete('save', true);
+    msg.textContent = `Saved. Camera lens: ${result.lens_mm.toFixed(2)} mm on a 36 mm sensor. You can keep editing or finish the session.`;
+  } catch (error) {
+    session.complete('save', false);
+    msg.textContent = error.message;
+  } finally {
+    updateActions();
+  }
+};
+finish.onclick = async () => {
+  if (!session.begin('finish')) return;
+  updateActions();
+  try {
+    await post('finish');
+    session.complete('finish', true);
+    msg.textContent = 'Session finished. The CLI has resumed. You can close this tab.';
+  } catch (error) {
+    session.complete('finish', false);
+    msg.textContent = error.message;
+  } finally {
+    updateActions();
+  }
+};
+(async()=>{try{const response=await fetch('state');if(!response.ok)throw Error('Session unavailable. Restart stagecraft align.');state=await response.json();document.querySelector('#context').textContent=state.active_project?`Project: ${state.active_project} / Scene: ${state.scene}\nControls: ${state.controls}\nBlender: ${state.output}\nDepth output: ${state.depth_output}`:'';alignment=state.alignment||defaults();document.querySelector('#height').value=alignment.camera_height;document.querySelector('#plane').value=alignment.reference_plane||'ground';draw();session.load(state.alignment);updateActions();msg.textContent='Align the guides and plane origin, then save.';}catch(e){msg.textContent=e.message;}})();
 </script>
 </html>
