@@ -3,6 +3,8 @@ import json
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from PIL import Image
@@ -70,3 +72,41 @@ for point,wanted in zip([[0,0,0],[2,0,0],[0,2,0],[0,0,2]],expected):
             paths.blend.write_bytes(b'manual changes')
             with self.assertRaises(ValueError): paths.export(BLENDER)
             self.assertEqual(paths.blend.read_bytes(), b'manual changes')
+
+    def test_managed_export_preserves_file_changed_while_blender_runs(self):
+        from stagecraft.storage import ScenePaths, create_project
+        for existing in (False, True):
+            with self.subTest(existing=existing), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                Image.new('RGB', (1000, 800)).save(root / 'photo.png')
+                create_project(root, 'demo')
+                paths = ScenePaths(root, 'demo', 'stage')
+                paths.initialize(root / 'photo.png', Path(__file__).resolve().parents[1] / 'examples/scene.json')
+                paths.save_alignment(alignment())
+                if existing:
+                    paths.export(BLENDER)
+                previous_controls = (paths.assets / 'project.json').read_bytes()
+                errors = []
+                def run():
+                    try:
+                        paths.export(BLENDER)
+                    except Exception as exc:
+                        errors.append(exc)
+                worker = threading.Thread(target=run)
+                worker.start()
+                try:
+                    deadline = time.monotonic() + 10
+                    # Observe the real export's input handoff before Blender
+                    # finishes, then emulate a manual save to its destination.
+                    while not list(paths.blend.parent.rglob('payload.json')):
+                        if not worker.is_alive() or time.monotonic() >= deadline:
+                            self.fail('Did not observe the running Blender export')
+                        time.sleep(.001)
+                    paths.blend.write_bytes(b'manual save during export')
+                finally:
+                    worker.join(190)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], ValueError)
+                self.assertEqual(paths.blend.read_bytes(), b'manual save during export')
+                self.assertEqual((paths.assets / 'project.json').read_bytes(), previous_controls)

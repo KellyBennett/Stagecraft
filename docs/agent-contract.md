@@ -19,7 +19,7 @@ Select a project explicitly by name. Creation is a separate command and never re
 
 The depth path is a destination for downstream rendering, not a depth-render command. Stagecraft does not move old files or generate renders. Project and scene names must be single safe path components; managed paths reject symlinks. No CLI output override can bypass this layout.
 
-Initialization requires a fresh scene name and copies the normalized image and validated primitive description into its assets folder. `project.json` holds saved controls and Stagecraft ownership metadata. Export replaces its own unchanged output, but rejects an existing unowned or externally modified Blender file. Unrelated project resources remain untouched. There are no archived runs, snapshots or numbered scene copies.
+Initialization requires a fresh scene name and copies the normalized image and validated primitive description into its assets folder. `project.json` holds saved controls and Stagecraft ownership metadata. Export replaces its own unchanged output, but rejects an existing unowned or externally modified Blender file. The candidate is built privately and the destination is checked again immediately before publication. A first export uses atomic no-clobber publication. Replacing an existing file still has a small check/replace race with external writers that do not share the scene lock; do not manually save to that destination during export. Unrelated project resources remain untouched. There are no archived runs, snapshots or numbered scene copies.
 
 ## Commands and results
 

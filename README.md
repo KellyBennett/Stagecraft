@@ -49,7 +49,7 @@ stagecraft align --project short-film --scene room
 stagecraft export --project short-film --scene room
 ```
 
-Export replaces the same Stagecraft scene. It refuses to overwrite a Blender file changed outside Stagecraft, so keep manual Blender work in a separately named file. Save updates one set of controls without creating numbered versions. Existing task files are not moved automatically.
+Export replaces the same Stagecraft scene. It checks for Blender files changed outside Stagecraft before and after generation. Keep manual Blender work in a separately named file and avoid saving to the export destination while export runs. Save updates one set of controls without creating numbered versions. Existing task files are not moved automatically.
 
 The Blender file contains the primitives, matched camera, packed reference photograph, original image resolution, and an enabled depth pass. Open it in Blender to refine the blockout or render guidance with your downstream tools. Geometry is an estimate; matching the camera alone does not reconstruct the scene. Distance to the reference plane supplies scale, and the selected point on that plane supplies the origin. Plane dimensions use X and Y; their Z value is ignored.
 

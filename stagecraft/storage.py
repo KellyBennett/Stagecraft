@@ -3,6 +3,8 @@ import hashlib
 import fcntl
 from contextlib import contextmanager
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from .project import initialize, load, write_json
@@ -131,7 +133,25 @@ class ScenePaths:
         data = self.owned()
         if self.blend.exists() and data.get('blend_sha256') != hashlib.sha256(self.blend.read_bytes()).hexdigest():
             raise ValueError('Existing Blender file is unowned or changed outside Stagecraft; preserve it and choose a new scene')
-        result = export(self.assets, self.assets / 'scene.json', self.blend, blender, force=self.blend.exists())
-        data['blend_sha256'] = hashlib.sha256(self.blend.read_bytes()).hexdigest()
-        write_json(self.assets / 'project.json', data)
+        original_hash = data.get('blend_sha256') if self.blend.exists() else None
+        with tempfile.TemporaryDirectory(dir=self.blend.parent, prefix='.stagecraft-publish-') as tmp:
+            candidate = Path(tmp) / 'scene.blend'
+            result = export(self.assets, self.assets / 'scene.json', candidate, blender)
+            candidate_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            self.validate()
+            current_hash = hashlib.sha256(self.blend.read_bytes()).hexdigest() if self.blend.exists() else None
+            if current_hash != original_hash:
+                raise ValueError('Blender file changed during export; existing file preserved')
+            if original_hash is None:
+                # Atomic no-clobber publication if another writer creates it now.
+                try:
+                    os.link(candidate, self.blend)
+                except FileExistsError as exc:
+                    raise ValueError('Blender file changed during export; existing file preserved') from exc
+            else:
+                # Recheck immediately before replacement. This is not a filesystem
+                # compare-and-swap against writers that do not share our lock.
+                candidate.replace(self.blend)
+            data['blend_sha256'] = candidate_hash
+            write_json(self.assets / 'project.json', data)
         return {**result, **self.describe()}
