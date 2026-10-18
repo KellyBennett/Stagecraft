@@ -20,35 +20,40 @@ python -m pip install .
 
 Start with a photograph that has straight edges along two perpendicular horizontal directions, such as the sides of a building or room. The camera model assumes a centered optical axis, square pixels, and no lens distortion. Cropped, panoramic, or impossible-perspective images may not match.
 
-Have your agent write a scene description. [The example](examples/scene.json) shows the supported boxes, planes, cylinders, and spheres. Their positions and dimensions are explicit estimates in meters. Stagecraft does not infer those measurements from the photograph.
+Stagecraft uses your ComfyLoom resource folder from `~/Library/Application Support/ComfyGateway/settings.json`. List its projects, then choose one by name. If you need a new project, create it explicitly:
 
 ```sh
-stagecraft run photo.jpg --project .stagecraft/room \
-  --scene examples/scene.json --output room.blend
+stagecraft projects
+stagecraft create-project --project short-film
 ```
 
-The browser opens your photograph. Drag each pair of colored guides onto parallel edges in the scene. The orange and cyan directions must be perpendicular to each other. Choose whether the reference plane is below or above the camera. Put the purple origin on that plane and enter the distance to it. Use the overhead option for an upward view of a roof or catwalk. Click **Save camera alignment** to resume the CLI and export the Blender file.
+Without ComfyLoom settings, pass `--root /path/to/your/assets` to each command. The resource folder must already exist. Stagecraft keeps scenes under the selected project's `blender/` folder and their working images and settings under `blender/assets/<scene>/`.
 
-Blender must be on your PATH, or pass its executable with `--blender`. On macOS, a typical path is:
+Have your agent write a primitive scene description. [The example](examples/scene.json) shows boxes, planes, cylinders, and spheres with estimated sizes and positions in meters. Replace `photo.jpg` with your photograph and `short-film` with your chosen project:
 
 ```sh
-stagecraft run photo.jpg --project .stagecraft/room \
-  --scene examples/scene.json --output room.blend \
-  --blender /Applications/Blender.app/Contents/MacOS/Blender
+stagecraft run photo.jpg --project short-film --scene room \
+  --primitives examples/scene.json
 ```
 
-Choose a new project directory for each `run`. To adjust an existing project or its shapes, use the separate commands:
+The browser shows the active project and scene. Drag each pair of colored guides onto parallel edges. The orange and cyan directions must be perpendicular to each other. Choose a reference plane below or above the camera, place the purple origin on it, and enter the camera's distance to that plane.
+
+Click **Save camera alignment** whenever you want to save the controls. You can keep adjusting and saving in the same page. Click **Finish alignment session** when you are ready for `run` to export. The scene is saved as `projects/short-film/blender/room.blend` in your resource folder.
+
+Blender must be on your PATH, or add `--blender /Applications/Blender.app/Contents/MacOS/Blender` on macOS.
+
+Use `run` for a new scene. To continue an existing scene, open its alignment page and export the latest saved controls:
 
 ```sh
-stagecraft align --project .stagecraft/room
-stagecraft solve --project .stagecraft/room
-stagecraft export --project .stagecraft/room \
-  --scene examples/scene.json --output revised.blend
+stagecraft align --project short-film --scene room
+stagecraft export --project short-film --scene room
 ```
+
+Export replaces the same Stagecraft scene. It checks for Blender files changed outside Stagecraft before and after generation. Keep manual Blender work in a separately named file and avoid saving to the export destination while export runs. Save updates one set of controls without creating numbered versions. Existing task files are not moved automatically.
 
 The Blender file contains the primitives, matched camera, packed reference photograph, original image resolution, and an enabled depth pass. Open it in Blender to refine the blockout or render guidance with your downstream tools. Geometry is an estimate; matching the camera alone does not reconstruct the scene. Distance to the reference plane supplies scale, and the selected point on that plane supplies the origin. Plane dimensions use X and Y; their Z value is ignored.
 
-For agent integrations, every CLI response is JSON on its own line. `run` emits `needs_human` with a local browser URL, waits up to 15 minutes, then continues when the human saves. Use `--no-open` when your agent will present that URL itself. A timeout or cancellation preserves the project so `align` can resume it. [The agent contract](docs/agent-contract.md) covers scene files, coordinates, and errors.
+For agent integrations, every CLI response is JSON on its own line. `run` emits `needs_human` with a local browser URL, keeps the alignment page available for up to 15 minutes, then continues when the human chooses Finish alignment session. Use `--no-open` when your agent will present that URL itself. A timeout or cancellation preserves the project so `align` can resume it. [The agent contract](docs/agent-contract.md) covers scene files, coordinates, and errors.
 
 ## How to contribute
 
