@@ -2,16 +2,39 @@
 
 Stagecraft is local. An agent provides geometry; the human provides the perspective alignment. No model API or image generation service is called.
 
+## Projects and storage
+
+Read the configured `project_root` from `~/Library/Application Support/ComfyGateway/settings.json` with `schema_version: 1`. Every command also accepts `--root ROOT` or `--config FILE`, which are mutually exclusive. The resource root must exist. Projects are directories under `projects/`, as in ComfyLoom; there is no additional registry.
+
+Select a project explicitly by name. Creation is a separate command and never replaces an existing project. Scene names identify one working copy within that project. Managed paths are:
+
+```text
+<root>/projects/<project>/
+  blender/<scene>.blend
+  blender/assets/<scene>/image.png
+  blender/assets/<scene>/project.json
+  blender/assets/<scene>/scene.json
+  outputs/<scene>-depth.png
+```
+
+The depth path is a destination for downstream rendering, not a depth-render command. Stagecraft does not move old files or generate renders. Project and scene names must be single safe path components; managed paths reject symlinks. No CLI output override can bypass this layout.
+
+Initialization requires a fresh scene name and copies the normalized image and validated primitive description into its assets folder. `project.json` holds saved controls and Stagecraft ownership metadata. Export replaces its own unchanged output, but rejects an existing unowned or externally modified Blender file. Unrelated project resources remain untouched. There are no archived runs, snapshots or numbered scene copies.
+
 ## Commands and results
 
-- `init IMAGE --project DIR`: create a new directory, normalize EXIF orientation into `image.png`, write `project.json`.
-- `align --project DIR [--no-open] [--timeout SECONDS]`: serve the human UI on an ephemeral loopback port. Emit `needs_human` with a capability URL, then `aligned` after a valid save. Default timeout is 900 seconds. The server closes after saving or timeout. Keep the capability URL private.
-- `status --project DIR`: report `needs_human` or `aligned` (alignment present; use `solve` to validate edits).
-- `solve --project DIR`: emit `solved` with the camera solution.
-- `export --project DIR --scene FILE --output FILE.blend [--blender EXECUTABLE] [--force]`: solve and validate, invoke background Blender, atomically publish the output. Existing files are rejected unless `--force` is set.
-- `run IMAGE --project DIR --scene FILE --output FILE.blend`: compose init, align, export; accepts the alignment and export flags above.
+- `projects`: list existing project names and the resource root.
+- `create-project --project NAME`: create a project explicitly.
+- `init IMAGE --project NAME --scene NAME --primitives FILE`: initialize a scene in an existing project.
+- `align --project NAME --scene NAME [--no-open] [--timeout SECONDS]`: open a loopback alignment session. Save persists the controls and leaves the session usable. Finish closes the session. The default timeout is 900 seconds. Keep the session URL private.
+- `status --project NAME --scene NAME`: report alignment presence, active project, scene and resolved paths.
+- `solve --project NAME --scene NAME`: solve from the latest saved controls.
+- `export --project NAME --scene NAME [--blender EXECUTABLE]`: reload saved controls and managed primitives, then replace the owned scene at its fixed path.
+- `run IMAGE --project NAME --scene NAME --primitives FILE`: initialize, align, and export after Finish. It accepts the alignment and export options above.
 
-Stdout is newline-delimited JSON. Exit 0 means success; exit 1 means error (`status: error`, `error` message); Ctrl-C returns 130 and `cancelled`. Argument parsing errors use argparse's stderr and exit 2. Paths are resolved locally. Blender output is captured and included in export errors, not mixed with JSON stdout. A fresh project directory is required for `init` and `run`. No alignment, source image, or scene file is overwritten by export.
+The agent can export separately while the alignment page stays open. Unsaved browser edits are not exported. Save atomically replaces the current controls; subsequent exports read the latest completed save. To change geometry, edit the scene's managed `scene.json` rather than creating another scene copy.
+
+Stdout is newline-delimited JSON. Results identify the active project and scene where applicable. `needs_human` includes the local URL. Exit 0 means success; exit 1 means a JSON error; Ctrl-C returns 130 and `cancelled`. Argument parsing errors use argparse's stderr and exit 2. Blender output is captured in export errors. Timeout and cancellation preserve saved controls so `align` can resume them.
 
 ## Scene JSON
 

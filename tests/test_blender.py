@@ -46,3 +46,27 @@ for point,wanted in zip([[0,0,0],[2,0,0],[0,2,0],[0,0,2]],expected):
 ''')
             completed=subprocess.run([BLENDER,'--background',str(root/'scene.blend'),'--python-exit-code','1','--python',str(script)],capture_output=True,text=True,timeout=180)
             self.assertEqual(completed.returncode,0,completed.stdout+completed.stderr)
+
+    def test_managed_repeat_export_uses_latest_saved_camera_and_preserves_other_data(self):
+        from stagecraft.storage import ScenePaths, create_project
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            Image.new('RGB', (1000, 800)).save(root / 'photo.png')
+            create_project(root, 'demo')
+            paths = ScenePaths(root, 'demo', 'stage')
+            paths.initialize(root / 'photo.png', Path(__file__).resolve().parents[1] / 'examples/scene.json')
+            note = paths.blend.parent / 'unrelated.blend'; note.write_bytes(b'keep me')
+            for height in (5, 8):
+                value = alignment(); value['camera_height'] = height
+                paths.save_alignment(value)
+                result = paths.export(BLENDER)
+                self.assertEqual(result['output'], str(paths.blend))
+                script = root / 'verify_latest.py'
+                script.write_text(f'import bpy\nassert abs(bpy.context.scene.camera.location.z - {height}) < 1e-5\n')
+                completed = subprocess.run([BLENDER, '--background', str(paths.blend), '--python-exit-code', '1', '--python', str(script)], capture_output=True, text=True, timeout=180)
+                self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+            self.assertEqual(note.read_bytes(), b'keep me')
+            self.assertFalse(paths.blend.with_suffix('.blend1').exists())
+            paths.blend.write_bytes(b'manual changes')
+            with self.assertRaises(ValueError): paths.export(BLENDER)
+            self.assertEqual(paths.blend.read_bytes(), b'manual changes')

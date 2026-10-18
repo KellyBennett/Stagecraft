@@ -38,4 +38,10 @@ Resolution: Supply boxes, planes, cylinders, and spheres with explicit world tra
 
 Question: How does an agent yield one task to a human and resume?
 
-Resolution: A loopback server emits a session URL, validates the alignment, persists it atomically, and exits after save or timeout. The CLI can resume from the persisted project. No hosted service or account is needed.
+Resolution: A loopback server emits a session URL, validates the alignment, persists it atomically, and remains usable after each save. Finish or timeout ends the session. The CLI can resume from the persisted project. No hosted service or account is needed.
+
+## Use ComfyLoom projects and one working scene
+
+The next slice uses ComfyLoom's configured resource root and directory-based project discovery. Project creation and selection are explicit. Each scene has one Blender file and one assets folder, with its normalized image, saved controls and primitive description. Final depth or render destinations belong in the project's outputs folder.
+
+Save replaces the current controls without closing the page. Export reads the latest saved controls and replaces the owned scene. Finish ends the session so the combined run command can export. Existing task files stay where they are; no automatic migration or history mechanism is added.
