@@ -21,6 +21,8 @@ def write_json(path, data):
 def load(project):
     path = Path(project).resolve()
     data = json.loads((path / "project.json").read_text())
+    if not isinstance(data, dict):
+        raise ValueError("Project must be an object")
     if data.get("version") != 1:
         raise ValueError("Unsupported project version")
     # Read dimensions from the actual normalized image, not editable metadata.

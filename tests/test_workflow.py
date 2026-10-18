@@ -110,3 +110,15 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(len(errors), 1)
                 self.assertIsInstance(errors[0], TimeoutError)
                 self.assertNotIn('alignment', load(self.project)[1])
+
+    def test_cli_reports_non_object_project_json_as_error(self):
+        for value in [None, [], "project", 1, True]:
+            with self.subTest(value=value):
+                (self.project / 'project.json').write_text(json.dumps(value))
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    result = main(['status', '--project', str(self.project)])
+                self.assertEqual(result, 1)
+                response = json.loads(output.getvalue())
+                self.assertEqual(response['status'], 'error')
+                self.assertEqual(response['error'], 'Project must be an object')
