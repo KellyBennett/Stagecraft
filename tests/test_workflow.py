@@ -1,11 +1,14 @@
 import contextlib
 import io
 import json
+import socket
+import time
 import tempfile
 import threading
 import unittest
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from pathlib import Path
 from PIL import Image
 from stagecraft.cli import main
@@ -69,3 +72,41 @@ class WorkflowTests(unittest.TestCase):
     def test_timeout_preserves_project(self):
         with self.assertRaises(TimeoutError): align(self.project,timeout=.05,open_browser=False)
         self.assertNotIn('alignment',load(self.project)[1])
+
+    def test_incomplete_requests_respect_absolute_session_deadline(self):
+        for partial, drip in [(b"GET /", False), (b"GET /", True), (None, False), (None, True)]:
+            with self.subTest(body=partial is None, drip=drip):
+                ready = threading.Event()
+                events, errors = [], []
+                def announce(event):
+                    events.append(event)
+                    ready.set()
+                def run():
+                    try:
+                        align(self.project, timeout=.5, open_browser=False, announce=announce)
+                    except Exception as exc:
+                        errors.append(exc)
+                thread = threading.Thread(target=run)
+                thread.start()
+                self.assertTrue(ready.wait(3))
+                url = urlsplit(events[0]['url'])
+                with socket.create_connection((url.hostname, url.port), timeout=1) as client:
+                    if partial is None:
+                        partial = (f"POST {url.path}alignment HTTP/1.1\r\n"
+                                   f"Host: {url.netloc}\r\nContent-Length: 1000\r\n\r\n").encode()
+                    client.sendall(partial)
+                    start = time.monotonic()
+                    while thread.is_alive() and time.monotonic() - start < 1.2:
+                        if drip:
+                            try:
+                                client.sendall(b" ")
+                            except OSError:
+                                pass
+                        thread.join(.04)
+                    completed_before_close = not thread.is_alive()
+                thread.join(2)
+                self.assertTrue(completed_before_close, "An incomplete request outlived the session deadline")
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(len(errors), 1)
+                self.assertIsInstance(errors[0], TimeoutError)
+                self.assertNotIn('alignment', load(self.project)[1])

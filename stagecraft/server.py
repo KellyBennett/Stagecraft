@@ -1,5 +1,7 @@
 """A single-use loopback alignment session. No arbitrary file endpoints."""
+import io
 import json
+import socket
 import secrets
 import time
 import webbrowser
@@ -15,7 +17,22 @@ def align(project, timeout=900, open_browser=True, announce=None):
     token = secrets.token_urlsafe(32)
     finished = False
 
+    class DeadlineReader(socket.SocketIO):
+        def readinto(self, buffer):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("Alignment session expired")
+            self._sock.settimeout(remaining)
+            return super().readinto(buffer)
+
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            self.rfile.close()
+            # Recalculate before every receive so trickled bytes cannot renew
+            # the session timeout while headers or a POST body are incomplete.
+            self.rfile = io.BufferedReader(DeadlineReader(self.connection, "rb"))
+
         def log_message(self, *args):
             pass
 
